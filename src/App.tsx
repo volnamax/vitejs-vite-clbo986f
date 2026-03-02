@@ -481,7 +481,7 @@ export default function LifeTracker() {
             ) : (
               <div className="space-y-3">
                 {savedTasks.map((template: any) => (
-                  <div key={template.id as string} className={`${cardClass} border rounded-lg p-4 backdrop-blur-sm`}>
+                  <div key={String(template.id)} className={`${cardClass} border rounded-lg p-4 backdrop-blur-sm`}>
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex-1">
                         <p className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
