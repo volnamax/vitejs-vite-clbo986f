@@ -197,13 +197,17 @@ export default function LifeTracker() {
   const completedExpense = expenseTasks.filter(t => t.completed).reduce((sum, t) => sum + t.points, 0);
 
 const uniqueDates = [...new Set(tasks.map(t => t.date))] as string[];
-uniqueDates.sort().reverse();  const dailyStats = uniqueDates.map(date => {
-    const dayTasks = tasks.filter(t => t.date === date);
-    const income = dayTasks.filter(t => t.type === 'income' && t.completed).reduce((sum, t) => sum + t.points, 0);
-    const expense = dayTasks.filter(t => t.type === 'expense' && t.completed).reduce((sum, t) => sum + t.points, 0);
-    return { date, income, expense, net: income - expense };
-  });
-
+uniqueDates.sort().reverse(); 
+ const dailyStats = uniqueDates.map(date => {
+  const dayTasks = tasks.filter(t => t.date === date);
+  const income = dayTasks
+    .filter(t => t.type === 'income' && t.completed)
+    .reduce((sum: number, t: any) => sum + t.points, 0);
+  const expense = dayTasks
+    .filter(t => t.type === 'expense' && t.completed)
+    .reduce((sum: number, t: any) => sum + t.points, 0);
+  return { date, income, expense, net: income - expense };
+});
   const totalLevel = Math.floor(balance / 100);
   const levelProgress = (balance % 100) / 100;
 
