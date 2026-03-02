@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Trash2, Plus, Zap, Heart, Calendar, BarChart3, Moon, Sun } from 'lucide-react';
 
 const DEFAULT_TASKS = [
