@@ -33,6 +33,7 @@ export default function LifeTracker() {
   const [goalCost, setGoalCost] = useState('');
   const [goalIcon, setGoalIcon] = useState('🎮');
   const [templateSchedule, setTemplateSchedule] = useState('once');
+  const [statsPeriod, setStatsPeriod] = useState<'week' | 'month'>('week');
 
   // Слушаем статус авторизации
   useEffect(() => {
@@ -764,41 +765,206 @@ uniqueDates.sort().reverse();
         )}
 
         {activeTab === 'stats' && (
-          <div className="space-y-4 mb-8">
-            <div className="flex items-center gap-2 mb-6">
-              <BarChart3 size={20} className={isDark ? 'text-cyan-400' : 'text-cyan-600'} />
-              <h2 className={`text-lg font-black tracking-tight ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>ИСТОРИЯ ПО ДАТАМ</h2>
+          <div className="space-y-6 mb-8">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <BarChart3 size={20} className={isDark ? 'text-cyan-400' : 'text-cyan-600'} />
+                <h2 className={`text-lg font-black tracking-tight ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>СТАТИСТИКА</h2>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setStatsPeriod('week')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    statsPeriod === 'week'
+                      ? isDark ? 'bg-cyan-500/30 text-cyan-300' : 'bg-cyan-400/30 text-cyan-700'
+                      : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Неделя
+                </button>
+                <button
+                  onClick={() => setStatsPeriod('month')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    statsPeriod === 'month'
+                      ? isDark ? 'bg-cyan-500/30 text-cyan-300' : 'bg-cyan-400/30 text-cyan-700'
+                      : isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Месяц
+                </button>
+              </div>
             </div>
 
-            {dailyStats.length === 0 ? (
-              <p className={`text-center py-8 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Нет данных</p>
-            ) : (
-              <div className="space-y-3">
-                {dailyStats.map(stat => (
-                  <div 
-                    key={stat.date as string}
-                    className={`${cardClass} border rounded-lg p-4 backdrop-blur-sm`}
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <div className={`font-bold tracking-wide ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                        {new Date(stat.date + 'T00:00:00').toLocaleDateString('ru-RU', { weekday: 'short', month: 'short', day: 'numeric' })}
+            {(() => {
+              const days = statsPeriod === 'week' ? 7 : 30;
+              const chartData = Array.from({ length: days }, (_, i) => {
+                const d = new Date();
+                d.setDate(d.getDate() - (days - 1 - i));
+                const dateStr = d.toISOString().split('T')[0];
+                const dayTasks = tasks.filter((t: any) => t.date === dateStr);
+                const income = dayTasks.filter((t: any) => t.type === 'income' && t.completed).reduce((s: number, t: any) => s + t.points, 0);
+                const expense = dayTasks.filter((t: any) => t.type === 'expense' && t.completed).reduce((s: number, t: any) => s + t.points, 0);
+                return { date: dateStr, income, expense, net: income - expense, label: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) };
+              });
+
+              const maxBar = Math.max(...chartData.map(d => Math.max(d.income, d.expense)), 1);
+              
+              // Running balance chart
+              let runningBalance = balance;
+              for (let i = chartData.length - 1; i >= 0; i--) {
+                runningBalance -= chartData[i].net;
+              }
+              const balanceData = chartData.map(d => {
+                runningBalance += d.net;
+                return { ...d, balance: runningBalance };
+              });
+              const minBal = Math.min(...balanceData.map(d => d.balance));
+              const maxBal = Math.max(...balanceData.map(d => d.balance), 1);
+              const balRange = maxBal - minBal || 1;
+
+              const totalIncome = chartData.reduce((s, d) => s + d.income, 0);
+              const totalExpense = chartData.reduce((s, d) => s + d.expense, 0);
+
+              return (
+                <>
+                  {/* Summary cards */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className={`${cardClass} border rounded-lg p-3 text-center`}>
+                      <p className={`text-xs font-bold ${isDark ? 'text-green-400/70' : 'text-green-600/70'}`}>ДОХОД</p>
+                      <p className={`text-xl font-black ${isDark ? 'text-green-400' : 'text-green-600'}`}>+{totalIncome}</p>
+                    </div>
+                    <div className={`${cardClass} border rounded-lg p-3 text-center`}>
+                      <p className={`text-xs font-bold ${isDark ? 'text-red-400/70' : 'text-red-600/70'}`}>РАСХОД</p>
+                      <p className={`text-xl font-black ${isDark ? 'text-red-400' : 'text-red-600'}`}>−{totalExpense}</p>
+                    </div>
+                    <div className={`${cardClass} border rounded-lg p-3 text-center`}>
+                      <p className={`text-xs font-bold ${isDark ? 'text-cyan-400/70' : 'text-cyan-600/70'}`}>ИТОГО</p>
+                      <p className={`text-xl font-black ${totalIncome - totalExpense >= 0 ? (isDark ? 'text-cyan-400' : 'text-cyan-600') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
+                        {totalIncome - totalExpense >= 0 ? '+' : '−'}{Math.abs(totalIncome - totalExpense)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Balance line chart */}
+                  <div className={`${cardClass} border rounded-xl p-4`}>
+                    <p className={`text-xs font-bold tracking-wider mb-3 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>📈 БАЛАНС</p>
+                    <div className="relative h-32">
+                      <svg viewBox={`0 0 ${balanceData.length * 20} 100`} className="w-full h-full" preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id="balGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={isDark ? '#22d3ee' : '#0891b2'} stopOpacity="0.3" />
+                            <stop offset="100%" stopColor={isDark ? '#22d3ee' : '#0891b2'} stopOpacity="0.02" />
+                          </linearGradient>
+                        </defs>
+                        <path
+                          d={`M0,${100 - ((balanceData[0]?.balance - minBal) / balRange) * 85 - 5} ${balanceData.map((d, i) => `L${i * 20 + 10},${100 - ((d.balance - minBal) / balRange) * 85 - 5}`).join(' ')} L${(balanceData.length - 1) * 20 + 10},100 L0,100 Z`}
+                          fill="url(#balGrad)"
+                        />
+                        <polyline
+                          points={balanceData.map((d, i) => `${i * 20 + 10},${100 - ((d.balance - minBal) / balRange) * 85 - 5}`).join(' ')}
+                          fill="none"
+                          stroke={isDark ? '#22d3ee' : '#0891b2'}
+                          strokeWidth="2"
+                          strokeLinejoin="round"
+                        />
+                        {balanceData.map((d, i) => (
+                          <circle
+                            key={i}
+                            cx={i * 20 + 10}
+                            cy={100 - ((d.balance - minBal) / balRange) * 85 - 5}
+                            r={statsPeriod === 'week' ? 3 : 1.5}
+                            fill={isDark ? '#22d3ee' : '#0891b2'}
+                          />
+                        ))}
+                      </svg>
+                      <div className="absolute top-0 right-0">
+                        <span className={`text-xs font-bold ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>{maxBal}</span>
                       </div>
-                      <div className={`text-lg font-black ${stat.net >= 0 ? (isDark ? 'text-green-400' : 'text-green-600') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
-                        {stat.net >= 0 ? '+' : '−'}{Math.abs(stat.net)}
+                      <div className="absolute bottom-0 right-0">
+                        <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{minBal}</span>
                       </div>
                     </div>
-                    <div className="flex gap-4">
-                      <div className={`text-sm ${isDark ? 'text-green-400/70' : 'text-green-600/70'}`}>
-                        Доход: <span className="font-bold">{stat.income}</span>
+                    {statsPeriod === 'week' && (
+                      <div className="flex justify-between mt-1">
+                        {balanceData.map((d, i) => (
+                          <span key={i} className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-500'}`} style={{ fontSize: '9px' }}>
+                            {new Date(d.date + 'T00:00:00').toLocaleDateString('ru-RU', { weekday: 'short' })}
+                          </span>
+                        ))}
                       </div>
-                      <div className={`text-sm ${isDark ? 'text-red-400/70' : 'text-red-600/70'}`}>
-                        Расход: <span className="font-bold">{stat.expense}</span>
+                    )}
+                  </div>
+
+                  {/* Income/Expense bar chart */}
+                  <div className={`${cardClass} border rounded-xl p-4`}>
+                    <p className={`text-xs font-bold tracking-wider mb-3 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>📊 ДОХОД / РАСХОД</p>
+                    <div className="flex items-end gap-1 h-28">
+                      {chartData.map((d, i) => {
+                        const incH = (d.income / maxBar) * 100;
+                        const expH = (d.expense / maxBar) * 100;
+                        return (
+                          <div key={i} className="flex-1 flex flex-col items-center gap-0.5 h-full justify-end">
+                            <div className="flex gap-px items-end flex-1 w-full justify-center">
+                              <div
+                                className={`rounded-t ${isDark ? 'bg-green-400' : 'bg-green-500'} transition-all duration-300`}
+                                style={{ height: `${incH}%`, width: statsPeriod === 'week' ? '40%' : '45%', minHeight: d.income > 0 ? 2 : 0 }}
+                              />
+                              <div
+                                className={`rounded-t ${isDark ? 'bg-red-400' : 'bg-red-500'} transition-all duration-300`}
+                                style={{ height: `${expH}%`, width: statsPeriod === 'week' ? '40%' : '45%', minHeight: d.expense > 0 ? 2 : 0 }}
+                              />
+                            </div>
+                            {statsPeriod === 'week' && (
+                              <span className={`text-center ${isDark ? 'text-slate-500' : 'text-slate-500'}`} style={{ fontSize: '9px' }}>
+                                {new Date(d.date + 'T00:00:00').toLocaleDateString('ru-RU', { weekday: 'short' })}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-4 mt-3 justify-center">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-2.5 h-2.5 rounded-sm ${isDark ? 'bg-green-400' : 'bg-green-500'}`} />
+                        <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Доход</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-2.5 h-2.5 rounded-sm ${isDark ? 'bg-red-400' : 'bg-red-500'}`} />
+                        <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Расход</span>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+
+                  {/* Daily list */}
+                  <div>
+                    <p className={`text-xs font-bold tracking-wider mb-3 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>📋 ПО ДНЯМ</p>
+                    {dailyStats.length === 0 ? (
+                      <p className={`text-center py-4 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Нет данных</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {dailyStats.map(stat => (
+                          <div 
+                            key={stat.date as string}
+                            className={`${cardClass} border rounded-lg p-3 backdrop-blur-sm flex justify-between items-center`}
+                          >
+                            <div className={`font-semibold text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                              {new Date(stat.date + 'T00:00:00').toLocaleDateString('ru-RU', { weekday: 'short', month: 'short', day: 'numeric' })}
+                            </div>
+                            <div className="flex gap-3 items-center">
+                              <span className={`text-xs ${isDark ? 'text-green-400/70' : 'text-green-600/70'}`}>+{stat.income}</span>
+                              <span className={`text-xs ${isDark ? 'text-red-400/70' : 'text-red-600/70'}`}>−{stat.expense}</span>
+                              <span className={`text-sm font-black ${stat.net >= 0 ? (isDark ? 'text-green-400' : 'text-green-600') : (isDark ? 'text-red-400' : 'text-red-600')}`}>
+                                {stat.net >= 0 ? '+' : '−'}{Math.abs(stat.net)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -889,7 +1055,7 @@ uniqueDates.sort().reverse();
                 />
                 <div>
                   <p className={`text-xs font-semibold mb-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Иконка:</p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 mb-2">
                     {GOAL_ICONS.map(icon => (
                       <button
                         key={icon}
@@ -903,6 +1069,19 @@ uniqueDates.sort().reverse();
                         {icon}
                       </button>
                     ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>или своё:</span>
+                    <input
+                      type="text"
+                      value={goalIcon}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val.length <= 2) setGoalIcon(val);
+                      }}
+                      className={`w-14 h-10 text-center text-xl rounded-lg border focus:outline-none focus:border-amber-400/50 transition-colors ${inputClass}`}
+                    />
+                    <span className="text-2xl">{goalIcon}</span>
                   </div>
                 </div>
                 <button
