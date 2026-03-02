@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Trash2, Plus, Zap, Heart, Calendar, BarChart3, Moon, Sun } from 'lucide-react';
+import { db, auth } from './firebase';
+import { setDoc, getDoc, doc } from 'firebase/firestore';
 
 const DEFAULT_TASKS = [
   { id: 1, name: 'Рабочий день', points: 100, type: 'income', completed: true, date: new Date().toISOString().split('T')[0] },
@@ -36,22 +38,45 @@ export default function LifeTracker() {
     return saved ? JSON.parse(saved) : [];
   });
   const [templateSchedule, setTemplateSchedule] = useState('once');
-  
   useEffect(() => {
-    localStorage.setItem('lifeTrackerBalance', balance.toString());
-  }, [balance]);
-  
+    const loadDataFromFirebase = async () => {
+      try {
+        const userId = auth.currentUser?.uid || 'anonymous';
+        const docRef = doc(db, 'users', userId);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setBalance(data.balance || 100);
+          setTasks(data.tasks || []);
+          setSavedTasks(data.savedTasks || []);
+          setTheme(data.theme || 'dark');
+        }
+      } catch (error) {
+        console.error('Ошибка загрузки:', error);
+      }
+    };
+    
+    loadDataFromFirebase();
+  }, []);
   useEffect(() => {
-    localStorage.setItem('lifeTrackerTasks', JSON.stringify(tasks));
-  }, [tasks]);
-  
-  useEffect(() => {
-    localStorage.setItem('lifeTrackerTheme', theme);
-  }, [theme]);
-
-  useEffect(() => {
-    localStorage.setItem('lifeTrackerSavedTasks', JSON.stringify(savedTasks));
-  }, [savedTasks]);
+    const saveToFirebase = async () => {
+      try {
+        const userId = auth.currentUser?.uid || 'anonymous';
+        await setDoc(doc(db, 'users', userId), {
+          balance,
+          tasks,
+          savedTasks,
+          theme,
+          lastUpdated: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error('Ошибка сохранения в Firebase:', error);
+      }
+    };
+    
+    saveToFirebase();
+  }, [balance, tasks, savedTasks, theme]);
 
   const addTask = () => {
     if (taskName && taskPoints) {
@@ -178,11 +203,6 @@ export default function LifeTracker() {
 
   const clearAllData = () => {
     if (confirm('Очистить ВСЕ данные? Баланс, задачи и шаблоны будут удалены!')) {
-      localStorage.removeItem('lifeTrackerBalance');
-      localStorage.removeItem('lifeTrackerTasks');
-      localStorage.removeItem('lifeTrackerTheme');
-      localStorage.removeItem('lifeTrackerSavedTasks');
-      
       setBalance(100);
       setTasks(DEFAULT_TASKS);
       setSavedTasks([]);
