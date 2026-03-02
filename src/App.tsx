@@ -196,8 +196,8 @@ export default function LifeTracker() {
   const completedIncome = incomeTasks.filter(t => t.completed).reduce((sum, t) => sum + t.points, 0);
   const completedExpense = expenseTasks.filter(t => t.completed).reduce((sum, t) => sum + t.points, 0);
 
-  const uniqueDates = [...new Set(tasks.map(t => t.date))].sort().reverse();
-  const dailyStats = uniqueDates.map(date => {
+const uniqueDates = [...new Set(tasks.map(t => t.date))] as string[];
+uniqueDates.sort().reverse();  const dailyStats = uniqueDates.map(date => {
     const dayTasks = tasks.filter(t => t.date === date);
     const income = dayTasks.filter(t => t.type === 'income' && t.completed).reduce((sum, t) => sum + t.points, 0);
     const expense = dayTasks.filter(t => t.type === 'expense' && t.completed).reduce((sum, t) => sum + t.points, 0);
@@ -535,7 +535,7 @@ export default function LifeTracker() {
               <div className="space-y-3">
                 {dailyStats.map(stat => (
                   <div 
-                    key={stat.date}
+                    key={stat.date as string}
                     className={`${cardClass} border rounded-lg p-4 backdrop-blur-sm`}
                   >
                     <div className="flex justify-between items-start mb-3">
