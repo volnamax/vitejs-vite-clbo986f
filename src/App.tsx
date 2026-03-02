@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Trash2, Plus, Zap, Heart, Calendar, BarChart3, Moon, Sun, LogOut } from 'lucide-react';
 import { db, auth, googleProvider } from './firebase';
 import { setDoc, getDoc, doc } from 'firebase/firestore';
@@ -14,6 +14,8 @@ const DEFAULT_TASKS = [
 export default function LifeTracker() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const loggingOut = useRef(false);
+  const dataLoaded = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [balance, setBalance] = useState(100);
   
@@ -59,6 +61,7 @@ export default function LifeTracker() {
       } catch (error) {
         console.error('Ошибка загрузки:', error);
       } finally {
+        dataLoaded.current = true;
         setIsLoading(false);
       }
     };
@@ -66,10 +69,17 @@ export default function LifeTracker() {
     loadDataFromFirebase();
   }, [user]);
 
-  // Сохраняем в Firebase при изменении данных
+  // Сохраняем в Firebase при изменении данных (с debounce)
+  const isFirstRender = useRef(true);
   useEffect(() => {
-    if (!user) return;
-    const saveToFirebase = async () => {
+    // Пропускаем первый рендер и пока данные не загружены
+    if (!user || loggingOut.current || !dataLoaded.current) return;
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    const timeout = setTimeout(async () => {
       try {
         await setDoc(doc(db, 'users', user.uid), {
           balance,
@@ -78,12 +88,13 @@ export default function LifeTracker() {
           theme,
           lastUpdated: new Date().toISOString(),
         });
+        console.log('Сохранено в Firebase');
       } catch (error) {
         console.error('Ошибка сохранения в Firebase:', error);
       }
-    };
-    
-    saveToFirebase();
+    }, 500);
+
+    return () => clearTimeout(timeout);
   }, [balance, tasks, savedTasks, theme, user]);
 
   const handleGoogleLogin = async () => {
@@ -96,12 +107,17 @@ export default function LifeTracker() {
 
   const handleLogout = async () => {
     try {
+      loggingOut.current = true;
+      dataLoaded.current = false;
+      isFirstRender.current = true;
       await signOut(auth);
       setBalance(100);
       setTasks(DEFAULT_TASKS);
       setSavedTasks([]);
       setTheme('dark');
+      loggingOut.current = false;
     } catch (error) {
+      loggingOut.current = false;
       console.error('Ошибка выхода:', error);
     }
   };
