@@ -36,6 +36,9 @@ export default function LifeTracker() {
   const [goalIcon, setGoalIcon] = useState('🎮');
   const [templateSchedule, setTemplateSchedule] = useState('once');
   const [statsPeriod, setStatsPeriod] = useState<'week' | 'month'>('week');
+  const [notifEnabled, setNotifEnabled] = useState(false);
+  const [notifTime, setNotifTime] = useState('20:00');
+  const notifTimer = useRef<any>(null);
 
   // Слушаем статус авторизации
   useEffect(() => {
@@ -66,6 +69,8 @@ export default function LifeTracker() {
           setGoals(data.goals || []);
           setLastStreakBonus(data.lastStreakBonus || 0);
           setUnlockedAchievements(data.unlockedAchievements || {});
+          setNotifEnabled(data.notifEnabled || false);
+          setNotifTime(data.notifTime || '20:00');
           setTheme(data.theme || 'dark');
         }
       } catch (error) {
@@ -98,6 +103,8 @@ export default function LifeTracker() {
           goals,
           lastStreakBonus,
           unlockedAchievements,
+          notifEnabled,
+          notifTime,
           theme,
           lastUpdated: new Date().toISOString(),
         });
@@ -108,7 +115,7 @@ export default function LifeTracker() {
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [balance, tasks, savedTasks, goals, lastStreakBonus, unlockedAchievements, theme, user]);
+  }, [balance, tasks, savedTasks, goals, lastStreakBonus, unlockedAchievements, notifEnabled, notifTime, theme, user]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -130,8 +137,9 @@ export default function LifeTracker() {
       setGoals([]);
       setLastStreakBonus(0);
       setUnlockedAchievements({});
+      setNotifEnabled(false);
+      setNotifTime('20:00');
       setTheme('dark');
-      loggingOut.current = false;
     } catch (error) {
       loggingOut.current = false;
       console.error('Ошибка выхода:', error);
@@ -269,6 +277,8 @@ export default function LifeTracker() {
       setGoals([]);
       setLastStreakBonus(0);
       setUnlockedAchievements({});
+      setNotifEnabled(false);
+      setNotifTime('20:00');
       setTheme('dark');
     }
   };
@@ -280,6 +290,8 @@ export default function LifeTracker() {
     goals,
     lastStreakBonus,
     unlockedAchievements,
+    notifEnabled,
+    notifTime,
     theme,
     exportDate: new Date().toISOString(),
   };
@@ -308,6 +320,8 @@ const importData = (event: any) => {
       setGoals(data.goals || []);
       setLastStreakBonus(data.lastStreakBonus || 0);
       setUnlockedAchievements(data.unlockedAchievements || {});
+      setNotifEnabled(data.notifEnabled || false);
+      setNotifTime(data.notifTime || '20:00');
       setTheme(data.theme || 'dark');
       alert('✅ Данные успешно загружены!');
     } catch (error) {
@@ -455,6 +469,52 @@ uniqueDates.sort().reverse();
   }, [balance, tasks, goals, savedTasks, currentStreak, user]);
 
   const unlockedCount = Object.keys(unlockedAchievements).length;
+
+  // Notification scheduling
+  const enableNotifications = async () => {
+    if (!('Notification' in window)) {
+      alert('Браузер не поддерживает уведомления');
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      setNotifEnabled(true);
+      new Notification('🎮 Life Quest', { body: 'Уведомления включены! Напомним о задачах.' });
+    } else {
+      alert('Уведомления заблокированы. Разреши их в настройках браузера.');
+    }
+  };
+
+  const disableNotifications = () => {
+    setNotifEnabled(false);
+    if (notifTimer.current) clearInterval(notifTimer.current);
+  };
+
+  useEffect(() => {
+    if (!notifEnabled) {
+      if (notifTimer.current) clearInterval(notifTimer.current);
+      return;
+    }
+
+    const checkAndNotify = () => {
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      if (currentTime === notifTime) {
+        const today = now.toISOString().split('T')[0];
+        const todayTasks = tasks.filter((t: any) => t.date === today);
+        const pending = todayTasks.filter((t: any) => !t.completed);
+        if (pending.length > 0) {
+          new Notification('🎮 Life Quest — Напоминание', {
+            body: `У тебя ${pending.length} невыполненных ${pending.length === 1 ? 'задача' : pending.length < 5 ? 'задачи' : 'задач'} на сегодня!`,
+            icon: '🔔',
+          });
+        }
+      }
+    };
+
+    notifTimer.current = setInterval(checkAndNotify, 60000);
+    return () => { if (notifTimer.current) clearInterval(notifTimer.current); };
+  }, [notifEnabled, notifTime, tasks]);
 
   const totalLevel = Math.floor(balance / 100);
   const levelProgress = (balance % 100) / 100;
@@ -652,6 +712,40 @@ uniqueDates.sort().reverse();
             </div>
           </div>
         )}
+
+        {/* Notification widget */}
+        <div className={`${cardClass} border rounded-xl p-4 mb-4 flex items-center justify-between`}>
+          <div className="flex items-center gap-3">
+            <span className="text-xl">{notifEnabled ? '🔔' : '🔕'}</span>
+            <div>
+              <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Напоминания</p>
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                {notifEnabled ? `Каждый день в ${notifTime}` : 'Выключены'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {notifEnabled && (
+              <input
+                type="time"
+                value={notifTime}
+                onChange={(e) => setNotifTime(e.target.value)}
+                className={`rounded-lg px-2 py-1.5 text-sm border focus:outline-none transition-colors ${inputClass}`}
+                style={{ width: '90px' }}
+              />
+            )}
+            <button
+              onClick={notifEnabled ? disableNotifications : enableNotifications}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                notifEnabled
+                  ? isDark ? 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50' : 'bg-slate-200/50 text-slate-600 hover:bg-slate-300/50'
+                  : isDark ? 'bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30' : 'bg-cyan-400/20 text-cyan-700 hover:bg-cyan-400/30'
+              }`}
+            >
+              {notifEnabled ? 'Выкл' : 'Вкл'}
+            </button>
+          </div>
+        </div>
 
         <div className="grid grid-cols-2 gap-4 mb-8">
           <div className={`${isDark ? 'bg-green-500/10 border-green-400/30' : 'bg-green-400/10 border-green-400/50'} border rounded-lg p-4 backdrop-blur-sm`}>
