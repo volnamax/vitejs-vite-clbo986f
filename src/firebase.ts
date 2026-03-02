@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAZHby4rDsELTtKDaDv2XunDGXBX4J4DrE",
@@ -14,8 +14,4 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-
-// Инициализируем анонимную авторизацию
-if (!auth.currentUser) {
-  signInAnonymously(auth).catch(console.error);
-}
+export const googleProvider = new GoogleAuthProvider();
