@@ -189,6 +189,44 @@ export default function LifeTracker() {
       setTheme('dark');
     }
   };
+  const exportData = () => {
+  const data = {
+    balance,
+    tasks,
+    savedTasks,
+    theme,
+    exportDate: new Date().toISOString(),
+  };
+  
+  const jsonString = JSON.stringify(data, null, 2);
+  const blob = new Blob([jsonString], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `life-quest-backup-${new Date().toISOString().split('T')[0]}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+const importData = (event: any) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (e: any) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      setBalance(data.balance || 100);
+      setTasks(data.tasks || []);
+      setSavedTasks(data.savedTasks || []);
+      setTheme(data.theme || 'dark');
+      alert('✅ Данные успешно загружены!');
+    } catch (error) {
+      alert('❌ Ошибка при загрузке файла!');
+    }
+  };
+  reader.readAsText(file);
+};
 
   const selectedTasks = tasks.filter(t => t.date === selectedDate);
   const incomeTasks = selectedTasks.filter(t => t.type === 'income');
@@ -252,6 +290,25 @@ uniqueDates.sort().reverse();
             >
               🗑️
             </button>
+            <button
+  onClick={exportData}
+  className={`p-3 rounded-lg transition-all font-bold ${isDark ? 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-300' : 'bg-blue-400/20 hover:bg-blue-400/30 text-blue-600'}`}
+  title="Экспортировать данные в JSON"
+>
+  💾
+</button>
+
+<label className={`p-3 rounded-lg transition-all font-bold cursor-pointer ${isDark ? 'bg-green-500/20 hover:bg-green-500/30 text-green-300' : 'bg-green-400/20 hover:bg-green-400/30 text-green-600'}`}
+  title="Импортировать данные из JSON"
+>
+  📂
+  <input
+    type="file"
+    accept=".json"
+    onChange={importData}
+    style={{ display: 'none' }}
+  />
+</label>
           </div>
         </div>
         
