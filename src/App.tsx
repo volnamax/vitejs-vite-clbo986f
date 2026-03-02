@@ -29,6 +29,8 @@ export default function LifeTracker() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [savedTasks, setSavedTasks] = useState<any[]>([]);
   const [goals, setGoals] = useState<any[]>([]);
+  const [lastStreakBonus, setLastStreakBonus] = useState(0);
+  const [unlockedAchievements, setUnlockedAchievements] = useState<Record<string, string>>({});
   const [goalName, setGoalName] = useState('');
   const [goalCost, setGoalCost] = useState('');
   const [goalIcon, setGoalIcon] = useState('🎮');
@@ -62,6 +64,8 @@ export default function LifeTracker() {
           setTasks(data.tasks || DEFAULT_TASKS);
           setSavedTasks(data.savedTasks || []);
           setGoals(data.goals || []);
+          setLastStreakBonus(data.lastStreakBonus || 0);
+          setUnlockedAchievements(data.unlockedAchievements || {});
           setTheme(data.theme || 'dark');
         }
       } catch (error) {
@@ -92,6 +96,8 @@ export default function LifeTracker() {
           tasks,
           savedTasks,
           goals,
+          lastStreakBonus,
+          unlockedAchievements,
           theme,
           lastUpdated: new Date().toISOString(),
         });
@@ -102,7 +108,7 @@ export default function LifeTracker() {
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [balance, tasks, savedTasks, goals, theme, user]);
+  }, [balance, tasks, savedTasks, goals, lastStreakBonus, unlockedAchievements, theme, user]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -122,6 +128,8 @@ export default function LifeTracker() {
       setTasks(DEFAULT_TASKS);
       setSavedTasks([]);
       setGoals([]);
+      setLastStreakBonus(0);
+      setUnlockedAchievements({});
       setTheme('dark');
       loggingOut.current = false;
     } catch (error) {
@@ -259,6 +267,8 @@ export default function LifeTracker() {
       setTasks(DEFAULT_TASKS);
       setSavedTasks([]);
       setGoals([]);
+      setLastStreakBonus(0);
+      setUnlockedAchievements({});
       setTheme('dark');
     }
   };
@@ -268,6 +278,8 @@ export default function LifeTracker() {
     tasks,
     savedTasks,
     goals,
+    lastStreakBonus,
+    unlockedAchievements,
     theme,
     exportDate: new Date().toISOString(),
   };
@@ -294,6 +306,8 @@ const importData = (event: any) => {
       setTasks(data.tasks || []);
       setSavedTasks(data.savedTasks || []);
       setGoals(data.goals || []);
+      setLastStreakBonus(data.lastStreakBonus || 0);
+      setUnlockedAchievements(data.unlockedAchievements || {});
       setTheme(data.theme || 'dark');
       alert('✅ Данные успешно загружены!');
     } catch (error) {
@@ -363,6 +377,85 @@ uniqueDates.sort().reverse();
     .reduce((sum: number, t: any) => sum + t.points, 0);
   return { date, income, expense, net: income - expense };
 });
+
+  // Streak calculation
+  const calculateStreak = () => {
+    let streak = 0;
+    const today = new Date();
+    for (let i = 0; i <= 365; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const dayTasks = tasks.filter((t: any) => t.date === dateStr);
+      const hasCompleted = dayTasks.some((t: any) => t.type === 'income' && t.completed);
+      if (hasCompleted) {
+        streak++;
+      } else if (i === 0) {
+        // Сегодня ещё ничего не сделал — не ломаем серию, проверяем вчера
+        continue;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  };
+  const currentStreak = calculateStreak();
+  const streakBonus = Math.floor(currentStreak / 7) * 50;
+  const daysToNextBonus = currentStreak % 7 === 0 && currentStreak > 0 ? 7 : 7 - (currentStreak % 7);
+
+  // Auto-apply streak bonus
+  useEffect(() => {
+    if (!user || !dataLoaded.current) return;
+    if (streakBonus > lastStreakBonus) {
+      const diff = streakBonus - lastStreakBonus;
+      setBalance(prev => prev + diff);
+      setLastStreakBonus(streakBonus);
+    }
+  }, [streakBonus, lastStreakBonus, user]);
+
+  // Achievements system
+  const ACHIEVEMENTS = [
+    { id: 'first_task', icon: '⭐', name: 'Первый шаг', desc: 'Выполни первую задачу', check: () => tasks.some((t: any) => t.completed) },
+    { id: 'ten_tasks', icon: '🔟', name: 'Десятка', desc: 'Выполни 10 задач', check: () => tasks.filter((t: any) => t.completed).length >= 10 },
+    { id: 'fifty_tasks', icon: '💪', name: 'Полтинник', desc: 'Выполни 50 задач', check: () => tasks.filter((t: any) => t.completed).length >= 50 },
+    { id: 'hundred_tasks', icon: '💯', name: 'Сотня', desc: 'Выполни 100 задач', check: () => tasks.filter((t: any) => t.completed).length >= 100 },
+    { id: 'balance_500', icon: '💰', name: 'Копилка', desc: 'Накопи 500 баллов', check: () => balance >= 500 },
+    { id: 'balance_1000', icon: '🏦', name: 'Тысячник', desc: 'Накопи 1000 баллов', check: () => balance >= 1000 },
+    { id: 'balance_5000', icon: '👑', name: 'Магнат', desc: 'Накопи 5000 баллов', check: () => balance >= 5000 },
+    { id: 'streak_3', icon: '🔥', name: 'Разогрев', desc: 'Серия 3 дня подряд', check: () => currentStreak >= 3 },
+    { id: 'streak_7', icon: '🔥', name: 'Неделя огня', desc: 'Серия 7 дней подряд', check: () => currentStreak >= 7 },
+    { id: 'streak_14', icon: '🔥', name: 'Двухнедельный марафон', desc: 'Серия 14 дней подряд', check: () => currentStreak >= 14 },
+    { id: 'streak_30', icon: '🌋', name: 'Вулкан', desc: 'Серия 30 дней подряд', check: () => currentStreak >= 30 },
+    { id: 'first_goal', icon: '🏆', name: 'Мечтатель', desc: 'Создай первую цель', check: () => goals.length > 0 },
+    { id: 'goal_bought', icon: '🎉', name: 'Достигатор', desc: 'Купи первую цель', check: () => goals.some((g: any) => g.purchased) },
+    { id: 'three_goals_bought', icon: '🏅', name: 'Коллекционер', desc: 'Купи 3 цели', check: () => goals.filter((g: any) => g.purchased).length >= 3 },
+    { id: 'level_5', icon: '🎮', name: 'Уровень 5', desc: 'Достигни 5 уровня', check: () => Math.floor(balance / 100) >= 5 },
+    { id: 'level_10', icon: '🚀', name: 'Уровень 10', desc: 'Достигни 10 уровня', check: () => Math.floor(balance / 100) >= 10 },
+    { id: 'template_master', icon: '📋', name: 'Шаблонщик', desc: 'Создай 5 шаблонов', check: () => savedTasks.length >= 5 },
+    { id: 'big_day', icon: '📈', name: 'Ударный день', desc: 'Заработай 300+ за день', check: () => {
+      const today = new Date().toISOString().split('T')[0];
+      return tasks.filter((t: any) => t.date === today && t.type === 'income' && t.completed).reduce((s: number, t: any) => s + t.points, 0) >= 300;
+    }},
+  ];
+
+  // Auto-unlock achievements
+  useEffect(() => {
+    if (!user || !dataLoaded.current) return;
+    let updated = false;
+    const newUnlocked = { ...unlockedAchievements };
+    for (const ach of ACHIEVEMENTS) {
+      if (!newUnlocked[ach.id] && ach.check()) {
+        newUnlocked[ach.id] = new Date().toISOString();
+        updated = true;
+      }
+    }
+    if (updated) {
+      setUnlockedAchievements(newUnlocked);
+    }
+  }, [balance, tasks, goals, savedTasks, currentStreak, user]);
+
+  const unlockedCount = Object.keys(unlockedAchievements).length;
+
   const totalLevel = Math.floor(balance / 100);
   const levelProgress = (balance % 100) / 100;
 
@@ -506,6 +599,60 @@ uniqueDates.sort().reverse();
           </div>
         </div>
 
+        {/* Streak widget */}
+        {currentStreak > 0 && (
+          <div className={`${isDark ? 'bg-gradient-to-r from-orange-500/15 to-amber-500/15 border-orange-400/30' : 'bg-gradient-to-r from-orange-400/15 to-amber-400/15 border-orange-400/40'} border rounded-xl p-4 mb-4 backdrop-blur-sm`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">🔥</span>
+                <div>
+                  <p className={`font-black text-2xl ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>
+                    {currentStreak} {currentStreak === 1 ? 'день' : currentStreak < 5 ? 'дня' : 'дней'}
+                  </p>
+                  <p className={`text-xs ${isDark ? 'text-orange-300/60' : 'text-orange-600/60'}`}>
+                    серия подряд
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                {streakBonus > 0 && (
+                  <p className={`text-xs font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                    +{streakBonus} бонус
+                  </p>
+                )}
+                <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                  {daysToNextBonus === 7 ? 'Бонус +50 через 7 дней' : `+50 через ${daysToNextBonus} дн.`}
+                </p>
+              </div>
+            </div>
+            {/* Mini streak dots */}
+            <div className="flex gap-1 mt-3">
+              {Array.from({ length: 7 }, (_, i) => {
+                const d = new Date();
+                d.setDate(d.getDate() - (6 - i));
+                const dateStr = d.toISOString().split('T')[0];
+                const dayTasks = tasks.filter((t: any) => t.date === dateStr);
+                const hasCompleted = dayTasks.some((t: any) => t.type === 'income' && t.completed);
+                const isToday = i === 6;
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                    <div className={`w-full h-2 rounded-full transition-all ${
+                      hasCompleted
+                        ? 'bg-gradient-to-r from-orange-400 to-amber-400'
+                        : isToday
+                          ? isDark ? 'bg-slate-600 border border-dashed border-orange-400/50' : 'bg-slate-300 border border-dashed border-orange-400/50'
+                          : isDark ? 'bg-slate-700/50' : 'bg-slate-200/50'
+                    }`} />
+                    <span className={`${isDark ? 'text-slate-500' : 'text-slate-500'}`} style={{ fontSize: '8px' }}>
+                      {d.toLocaleDateString('ru-RU', { weekday: 'short' }).slice(0, 2)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-4 mb-8">
           <div className={`${isDark ? 'bg-green-500/10 border-green-400/30' : 'bg-green-400/10 border-green-400/50'} border rounded-lg p-4 backdrop-blur-sm`}>
             <p className={`text-xs font-bold tracking-widest mb-1 ${isDark ? 'text-green-300/70' : 'text-green-600/70'}`}>ДОХОД</p>
@@ -567,6 +714,16 @@ uniqueDates.sort().reverse();
             }`}
           >
             🏆 ЦЕЛИ
+          </button>
+          <button
+            onClick={() => setActiveTab('achievements')}
+            className={`px-4 py-3 font-bold text-sm tracking-wider transition-all whitespace-nowrap ${
+              activeTab === 'achievements'
+                ? `${isDark ? 'text-violet-400 border-b-2 border-violet-400' : 'text-violet-600 border-b-2 border-violet-600'}`
+                : `${isDark ? 'text-slate-400' : 'text-slate-600'}`
+            }`}
+          >
+            🏅 {unlockedCount}/{ACHIEVEMENTS.length}
           </button>
         </div>
 
@@ -1116,6 +1273,68 @@ uniqueDates.sort().reverse();
                       >
                         <Trash2 size={14} />
                       </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'achievements' && (
+          <div className="space-y-6 mb-8">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🏅</span>
+                <h2 className={`text-lg font-black tracking-tight ${isDark ? 'text-violet-400' : 'text-violet-600'}`}>ДОСТИЖЕНИЯ</h2>
+              </div>
+              <span className={`text-sm font-bold ${isDark ? 'text-violet-400' : 'text-violet-600'}`}>
+                {unlockedCount} / {ACHIEVEMENTS.length}
+              </span>
+            </div>
+
+            {/* Progress bar */}
+            <div className="space-y-1">
+              <div className={`w-full rounded-full h-3 overflow-hidden ${isDark ? 'bg-slate-700/50' : 'bg-slate-200/50'}`}>
+                <div
+                  className="h-full bg-gradient-to-r from-violet-500 to-purple-400 transition-all duration-500"
+                  style={{ width: `${(unlockedCount / ACHIEVEMENTS.length) * 100}%` }}
+                />
+              </div>
+              <p className={`text-xs text-right ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                {Math.round((unlockedCount / ACHIEVEMENTS.length) * 100)}% открыто
+              </p>
+            </div>
+
+            {/* Unlocked */}
+            {unlockedCount > 0 && (
+              <div>
+                <p className={`text-xs font-bold tracking-wider mb-3 ${isDark ? 'text-violet-400/70' : 'text-violet-600/70'}`}>✨ ОТКРЫТЫЕ</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {ACHIEVEMENTS.filter(a => unlockedAchievements[a.id]).map(ach => (
+                    <div key={ach.id} className={`${isDark ? 'bg-violet-500/10 border-violet-400/30' : 'bg-violet-400/10 border-violet-400/40'} border rounded-xl p-4 text-center transition-all hover:scale-105`}>
+                      <div className="text-3xl mb-2">{ach.icon}</div>
+                      <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{ach.name}</p>
+                      <p className={`text-xs mt-1 ${isDark ? 'text-violet-300/60' : 'text-violet-600/60'}`}>{ach.desc}</p>
+                      <p className={`text-xs mt-2 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                        {new Date(unlockedAchievements[ach.id]).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Locked */}
+            {unlockedCount < ACHIEVEMENTS.length && (
+              <div>
+                <p className={`text-xs font-bold tracking-wider mb-3 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>🔒 ЗАКРЫТЫЕ</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {ACHIEVEMENTS.filter(a => !unlockedAchievements[a.id]).map(ach => (
+                    <div key={ach.id} className={`${cardClass} border rounded-xl p-4 text-center opacity-50`}>
+                      <div className="text-3xl mb-2 grayscale">🔒</div>
+                      <p className={`font-bold text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{ach.name}</p>
+                      <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{ach.desc}</p>
                     </div>
                   ))}
                 </div>
