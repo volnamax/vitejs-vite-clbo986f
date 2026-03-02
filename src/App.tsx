@@ -9,6 +9,9 @@ const DEFAULT_TASKS = [
   { id: 3, name: 'Стриминг фильма', points: 80, type: 'expense', completed: false, date: new Date().toISOString().split('T')[0] },
 ];
 
+const [isLoading, setIsLoading] = useState(true);
+
+
 export default function LifeTracker() {
   const [balance, setBalance] = useState(() => {
     if (typeof window === 'undefined') return 100;
@@ -41,6 +44,7 @@ export default function LifeTracker() {
   useEffect(() => {
     const loadDataFromFirebase = async () => {
       try {
+        setIsLoading(true);
         const userId = auth.currentUser?.uid || 'anonymous';
         const docRef = doc(db, 'users', userId);
         const docSnap = await getDoc(docRef);
@@ -54,11 +58,15 @@ export default function LifeTracker() {
         }
       } catch (error) {
         console.error('Ошибка загрузки:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
     
     loadDataFromFirebase();
   }, []);
+
+
   useEffect(() => {
     const saveToFirebase = async () => {
       try {
@@ -275,6 +283,14 @@ uniqueDates.sort().reverse();
   const cardClass = isDark ? 'bg-slate-800/50 border-slate-700/50' : 'bg-white/80 border-slate-200/80';
   const inputClass = isDark ? 'bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400' : 'bg-white/50 border-slate-300/50 text-slate-900 placeholder-slate-500';
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-white text-xl">⏳ Загрузка данных...</div>
+      </div>
+    );
+  }
+  
   return (
     <div className={`min-h-screen ${bgClass} ${textClass} font-sans overflow-hidden transition-colors duration-300`}>
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
