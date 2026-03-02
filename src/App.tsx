@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Trash2, Plus, Zap, Heart, Calendar, BarChart3, Moon, Sun, LogOut } from 'lucide-react';
+import { Trash2, Plus, Zap, Heart, Calendar, BarChart3, Moon, Sun, LogOut, Trophy } from 'lucide-react';
 import { db, auth, googleProvider } from './firebase';
 import { setDoc, getDoc, doc } from 'firebase/firestore';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -28,6 +28,10 @@ export default function LifeTracker() {
   const [theme, setTheme] = useState('dark');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [savedTasks, setSavedTasks] = useState<any[]>([]);
+  const [goals, setGoals] = useState<any[]>([]);
+  const [goalName, setGoalName] = useState('');
+  const [goalCost, setGoalCost] = useState('');
+  const [goalIcon, setGoalIcon] = useState('🎮');
   const [templateSchedule, setTemplateSchedule] = useState('once');
 
   // Слушаем статус авторизации
@@ -56,6 +60,7 @@ export default function LifeTracker() {
           setBalance(data.balance ?? 100);
           setTasks(data.tasks || DEFAULT_TASKS);
           setSavedTasks(data.savedTasks || []);
+          setGoals(data.goals || []);
           setTheme(data.theme || 'dark');
         }
       } catch (error) {
@@ -85,6 +90,7 @@ export default function LifeTracker() {
           balance,
           tasks,
           savedTasks,
+          goals,
           theme,
           lastUpdated: new Date().toISOString(),
         });
@@ -95,7 +101,7 @@ export default function LifeTracker() {
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [balance, tasks, savedTasks, theme, user]);
+  }, [balance, tasks, savedTasks, goals, theme, user]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -114,6 +120,7 @@ export default function LifeTracker() {
       setBalance(100);
       setTasks(DEFAULT_TASKS);
       setSavedTasks([]);
+      setGoals([]);
       setTheme('dark');
       loggingOut.current = false;
     } catch (error) {
@@ -246,10 +253,11 @@ export default function LifeTracker() {
   };
 
   const clearAllData = () => {
-    if (confirm('Очистить ВСЕ данные? Баланс, задачи и шаблоны будут удалены!')) {
+    if (confirm('Очистить ВСЕ данные? Баланс, задачи, шаблоны и цели будут удалены!')) {
       setBalance(100);
       setTasks(DEFAULT_TASKS);
       setSavedTasks([]);
+      setGoals([]);
       setTheme('dark');
     }
   };
@@ -258,6 +266,7 @@ export default function LifeTracker() {
     balance,
     tasks,
     savedTasks,
+    goals,
     theme,
     exportDate: new Date().toISOString(),
   };
@@ -283,6 +292,7 @@ const importData = (event: any) => {
       setBalance(data.balance || 100);
       setTasks(data.tasks || []);
       setSavedTasks(data.savedTasks || []);
+      setGoals(data.goals || []);
       setTheme(data.theme || 'dark');
       alert('✅ Данные успешно загружены!');
     } catch (error) {
@@ -291,6 +301,48 @@ const importData = (event: any) => {
   };
   reader.readAsText(file);
 };
+
+  const GOAL_ICONS = ['🎮', '🎬', '🍕', '✈️', '👟', '📱', '🎧', '💻', '🏋️', '📚', '🎸', '🏖️', '🚗', '🎁', '💎', '🏠'];
+  const MAX_ACTIVE_GOALS = 5;
+  const activeGoals = goals.filter(g => !g.purchased);
+  const purchasedGoals = goals.filter(g => g.purchased);
+
+  const addGoal = () => {
+    if (!goalName || !goalCost) return;
+    if (activeGoals.length >= MAX_ACTIVE_GOALS) {
+      alert(`Максимум ${MAX_ACTIVE_GOALS} активных целей!`);
+      return;
+    }
+    const newGoal = {
+      id: Date.now(),
+      name: goalName,
+      cost: parseInt(goalCost),
+      icon: goalIcon,
+      purchased: false,
+      createdAt: new Date().toISOString(),
+    };
+    setGoals([...goals, newGoal]);
+    setGoalName('');
+    setGoalCost('');
+    setGoalIcon('🎮');
+  };
+
+  const purchaseGoal = (id: number) => {
+    const goal = goals.find(g => g.id === id);
+    if (!goal || goal.purchased) return;
+    if (balance < goal.cost) {
+      alert(`Не хватает баллов! Нужно ${goal.cost}, у тебя ${balance}`);
+      return;
+    }
+    if (confirm(`Купить "${goal.name}" за ${goal.cost} баллов?`)) {
+      setBalance(balance - goal.cost);
+      setGoals(goals.map(g => g.id === id ? { ...g, purchased: true, purchasedAt: new Date().toISOString() } : g));
+    }
+  };
+
+  const deleteGoal = (id: number) => {
+    setGoals(goals.filter(g => g.id !== id));
+  };
 
   const selectedTasks = tasks.filter(t => t.date === selectedDate);
   const incomeTasks = selectedTasks.filter(t => t.type === 'income');
@@ -504,6 +556,16 @@ uniqueDates.sort().reverse();
             }`}
           >
             ИСТОРИЯ
+          </button>
+          <button
+            onClick={() => setActiveTab('goals')}
+            className={`px-4 py-3 font-bold text-sm tracking-wider transition-all whitespace-nowrap ${
+              activeTab === 'goals'
+                ? `${isDark ? 'text-amber-400 border-b-2 border-amber-400' : 'text-amber-600 border-b-2 border-amber-600'}`
+                : `${isDark ? 'text-slate-400' : 'text-slate-600'}`
+            }`}
+          >
+            🏆 ЦЕЛИ
           </button>
         </div>
 
@@ -735,6 +797,149 @@ uniqueDates.sort().reverse();
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'goals' && (
+          <div className="space-y-6 mb-8">
+            <div className="flex items-center gap-2 mb-2">
+              <Trophy size={20} className={isDark ? 'text-amber-400' : 'text-amber-600'} />
+              <h2 className={`text-lg font-black tracking-tight ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                ЦЕЛИ ({activeGoals.length}/{MAX_ACTIVE_GOALS})
+              </h2>
+            </div>
+
+            {activeGoals.length > 0 && (
+              <div className="space-y-3">
+                {activeGoals.map(goal => {
+                  const progress = Math.min(balance / goal.cost, 1);
+                  const canBuy = balance >= goal.cost;
+                  return (
+                    <div key={goal.id} className={`${cardClass} border rounded-xl p-5 backdrop-blur-sm transition-all ${canBuy ? (isDark ? 'ring-1 ring-amber-400/50' : 'ring-1 ring-amber-500/50') : ''}`}>
+                      <div className="flex items-start gap-4">
+                        <div className="text-4xl">{goal.icon}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start gap-2">
+                            <p className={`font-bold text-lg truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{goal.name}</p>
+                            <button
+                              onClick={() => deleteGoal(goal.id)}
+                              className={`p-1.5 rounded-lg transition-colors shrink-0 ${isDark ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/50'}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          <div className="mt-2 mb-3">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                {balance} / {goal.cost} pts
+                              </span>
+                              <span className={`text-xs font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                                {Math.round(progress * 100)}%
+                              </span>
+                            </div>
+                            <div className={`w-full rounded-full h-2.5 overflow-hidden ${isDark ? 'bg-slate-700/50' : 'bg-slate-200/50'}`}>
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${canBuy ? 'bg-gradient-to-r from-amber-400 to-yellow-300' : 'bg-gradient-to-r from-amber-500/60 to-amber-400/60'}`}
+                                style={{ width: `${progress * 100}%` }}
+                              />
+                            </div>
+                            {!canBuy && (
+                              <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                                Ещё {goal.cost - balance} pts до цели
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => purchaseGoal(goal.id)}
+                            disabled={!canBuy}
+                            className={`w-full py-2.5 rounded-lg font-bold text-sm transition-all ${
+                              canBuy
+                                ? 'bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-900 transform hover:scale-105 active:scale-95'
+                                : isDark ? 'bg-slate-700/30 text-slate-500 cursor-not-allowed' : 'bg-slate-200/50 text-slate-400 cursor-not-allowed'
+                            }`}
+                          >
+                            {canBuy ? `🎉 Купить за ${goal.cost} pts` : `🔒 Не хватает баллов`}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {activeGoals.length < MAX_ACTIVE_GOALS && (
+              <div className={`${cardClass} border rounded-xl p-5 space-y-4`}>
+                <p className={`text-sm font-bold tracking-wider ${isDark ? 'text-amber-400/70' : 'text-amber-600/70'}`}>НОВАЯ ЦЕЛЬ</p>
+                <input
+                  type="text"
+                  placeholder="На что копишь..."
+                  value={goalName}
+                  onChange={(e) => setGoalName(e.target.value)}
+                  className={`w-full rounded-lg px-4 py-3 border focus:outline-none focus:border-amber-400/50 transition-colors ${inputClass}`}
+                />
+                <input
+                  type="number"
+                  placeholder="Стоимость в баллах..."
+                  value={goalCost}
+                  onChange={(e) => setGoalCost(e.target.value)}
+                  className={`w-full rounded-lg px-4 py-3 border focus:outline-none focus:border-amber-400/50 transition-colors ${inputClass}`}
+                />
+                <div>
+                  <p className={`text-xs font-semibold mb-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Иконка:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {GOAL_ICONS.map(icon => (
+                      <button
+                        key={icon}
+                        onClick={() => setGoalIcon(icon)}
+                        className={`w-10 h-10 rounded-lg text-xl flex items-center justify-center transition-all ${
+                          goalIcon === icon
+                            ? 'bg-amber-500/30 ring-2 ring-amber-400 scale-110'
+                            : isDark ? 'bg-slate-700/50 hover:bg-slate-600/50' : 'bg-slate-200/50 hover:bg-slate-300/50'
+                        }`}
+                      >
+                        {icon}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={addGoal}
+                  className="w-full bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-900 font-bold py-3 rounded-lg transition-all transform hover:scale-105 active:scale-95"
+                >
+                  + Добавить цель
+                </button>
+              </div>
+            )}
+
+            {activeGoals.length >= MAX_ACTIVE_GOALS && (
+              <p className={`text-center text-sm ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                Достигнут лимит — {MAX_ACTIVE_GOALS} активных целей. Купи или удали цель, чтобы добавить новую.
+              </p>
+            )}
+
+            {purchasedGoals.length > 0 && (
+              <div className="mt-8">
+                <p className={`text-xs font-bold tracking-widest mb-3 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>🏅 ДОСТИГНУТЫЕ</p>
+                <div className="space-y-2">
+                  {purchasedGoals.map(goal => (
+                    <div key={goal.id} className={`${isDark ? 'bg-slate-800/30 border-slate-700/30' : 'bg-slate-100/50 border-slate-200/50'} border rounded-lg p-3 opacity-60 flex items-center gap-3`}>
+                      <span className="text-2xl">{goal.icon}</span>
+                      <div className="flex-1">
+                        <p className={`font-semibold line-through ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{goal.name}</p>
+                        <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Куплено за {goal.cost} pts</p>
+                      </div>
+                      <button
+                        onClick={() => deleteGoal(goal.id)}
+                        className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
